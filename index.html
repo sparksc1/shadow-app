@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>살아있는 그림자</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    color: #fff;
+    font-family: 'Helvetica Neue', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── 시작 화면 ── */
+  #startScreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    gap: 24px;
+    padding: 32px;
+    text-align: center;
+  }
+
+  .app-title {
+    font-size: 2.4rem;
+    font-weight: 900;
+    letter-spacing: -1px;
+    line-height: 1.1;
+  }
+  .app-title span { color: #7DF9FF; }
+
+  .app-desc {
+    font-size: 0.95rem;
+    color: #888;
+    line-height: 1.7;
+    max-width: 300px;
+  }
+
+  /* 모드 선택 */
+  .mode-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 340px;
+  }
+
+  .mode-btn {
+    background: #111;
+    border: 2px solid #222;
+    border-radius: 16px;
+    padding: 18px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .mode-btn:hover, .mode-btn.selected {
+    border-color: #7DF9FF;
+    background: #0a1a1a;
+  }
+  .mode-btn .mode-icon { font-size: 2rem; }
+  .mode-btn .mode-name { font-size: 0.85rem; font-weight: 700; color: #ccc; }
+  .mode-btn .mode-desc { font-size: 0.7rem; color: #555; text-align: center; }
+  .mode-btn.selected .mode-name { color: #7DF9FF; }
+
+  .start-btn {
+    background: #7DF9FF;
+    color: #000;
+    border: none;
+    border-radius: 50px;
+    padding: 16px 48px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    cursor: pointer;
+    transition: transform 0.15s;
+    width: 100%;
+    max-width: 340px;
+  }
+  .start-btn:active { transform: scale(0.97); }
+
+  /* ── 카메라 화면 ── */
+  #cameraScreen {
+    display: none;
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  #video {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+  }
+
+  #canvas {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  #effectCanvas {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+  }
+
+  /* UI 오버레이 */
+  .ui-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+    pointer-events: all;
+  }
+
+  .back-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    border-radius: 50%;
+    width: 40px; height: 40px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .mode-indicator {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(125,249,255,0.4);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    color: #7DF9FF;
+    font-weight: 700;
+  }
+
+  .flash-indicator {
+    background: rgba(255,220,0,0.2);
+    border: 1px solid rgba(255,220,0,0.4);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    color: #FFD700;
+    font-weight: 700;
+    pointer-events: all;
+    cursor: pointer;
+  }
+
+  /* 상태 안내 */
+  .status-box {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.75);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px;
+    padding: 12px 20px;
+    text-align: center;
+    min-width: 220px;
+    pointer-events: none;
+  }
+  .status-text {
+    font-size: 0.9rem;
+    color: #ddd;
+    line-height: 1.5;
+  }
+  .status-step {
+    font-size: 0.7rem;
+    color: #7DF9FF;
+    font-weight: 700;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+
+  /* 캡처 버튼 */
+  .bottom-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 24px 32px 40px;
+    background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 32px;
+    pointer-events: all;
+  }
+
+  .capture-btn {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 4px solid #fff;
+    background: rgba(255,255,255,0.2);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem;
+    transition: transform 0.1s;
+    position: relative;
+  }
+  .capture-btn:active { transform: scale(0.92); }
+  .capture-btn::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid rgba(125,249,255,0.4);
+  }
+
+  .reset-btn {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    border-radius: 50px;
+    padding: 10px 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  /* ── 애니메이션 효과들 ── */
+
+  /* 공포 모드 - 붉은 비네트 */
+  .horror-vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(150,0,0,0.6) 100%);
+    opacity: 0;
+    transition: opacity 1s;
+    pointer-events: none;
+  }
+  .horror-vignette.active { opacity: 1; }
+
+  /* 깜빡임 */
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    92% { opacity: 1; }
+    93% { opacity: 0.3; }
+    94% { opacity: 1; }
+    96% { opacity: 0.1; }
+    97% { opacity: 1; }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translate(0,0); }
+    25% { transform: translate(-3px, 2px); }
+    50% { transform: translate(3px, -2px); }
+    75% { transform: translate(-2px, -3px); }
+  }
+
+  .shaking { animation: shake 0.1s infinite; }
+  .flickering { animation: flicker 2s infinite; }
+
+  /* 귀여운 모드 하트 파티클 */
+  .particle {
+    position: absolute;
+    pointer-events: none;
+    font-size: 1.5rem;
+    animation: floatUp 2s ease-out forwards;
+    z-index: 20;
+  }
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-120px) scale(0.5); }
+  }
+
+  /* 스캔 라인 (SF모드) */
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(to right, transparent, #7DF9FF, transparent);
+    opacity: 0.8;
+    animation: scanDown 2s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes scanDown {
+    0% { top: 0; }
+    100% { top: 100%; }
+  }
+
+  /* 상태 표시 */
+  #stateLabel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(125,249,255,0.8);
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+    text-align: center;
+    z-index: 30;
+  }
+  #stateLabel.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ── 시작 화면 ── -->
+<div id="startScreen">
+  <div>
+    <div class="app-title">살아있는<br><span>그림자</span></div>
+  </div>
+  <p class="app-desc">플래시로 그림자를 만들고<br>손을 빼면… 그림자가 혼자 살아 움직여요 👻</p>
+
+  <div class="mode-grid">
+    <div class="mode-btn selected" data-mode="horror">
+      <div class="mode-icon">👻</div>
+      <div class="mode-name">공포</div>
+      <div class="mode-desc">그림자가 혼자 움직이며 사라짐</div>
+    </div>
+    <div class="mode-btn" data-mode="cute">
+      <div class="mode-icon">🐱</div>
+      <div class="mode-name">귀여운</div>
+      <div class="mode-desc">눈이 생기고 하트가 나옴</div>
+    </div>
+    <div class="mode-btn" data-mode="scifi">
+      <div class="mode-icon">⚡</div>
+      <div class="mode-name">SF</div>
+      <div class="mode-desc">픽셀로 분해되며 사라짐</div>
+    </div>
+    <div class="mode-btn" data-mode="liquid">
+      <div class="mode-icon">🌊</div>
+      <div class="mode-name">액체</div>
+      <div class="mode-desc">녹아서 흘러내림</div>
+    </div>
+  </div>
+
+  <button class="start-btn" id="startBtn">카메라 시작 🔦</button>
+</div>
+
+<!-- ── 카메라 화면 ── -->
+<div id="cameraScreen">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <canvas id="effectCanvas"></canvas>
+
+  <div class="horror-vignette" id="horrorVignette"></div>
+  <div id="stateLabel"></div>
+
+  <div class="ui-overlay">
+    <div class="top-bar">
+      <button class="back-btn" id="backBtn">←</button>
+      <div class="mode-indicator" id="modeIndicator">👻 공포</div>
+      <div class="flash-indicator" id="flashIndicator">🔦 플래시</div>
+    </div>
+
+    <div class="status-box" id="statusBox">
+      <div class="status-step" id="statusStep">STEP 1</div>
+      <div class="status-text" id="statusText">플래시를 벽이나 책상에 비추고<br>손이나 물체로 그림자를 만드세요</div>
+    </div>
+
+    <div class="bottom-bar">
+      <button class="reset-btn" id="resetBtn">다시 시작</button>
+      <button class="capture-btn" id="captureBtn">📸</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 상태 관리 ──
+let selectedMode = 'horror';
+let appState = 'ready'; // ready → captured → animating
+let stream = null;
+let torchOn = false;
+let capturedImageData = null;
+let animFrame = null;
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const effectCanvas = document.getElementById('effectCanvas');
+const ctx = canvas.getContext('2d');
+const ectx = effectCanvas.getContext('2d');
+
+// ── 모드 선택 ──
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedMode = btn.dataset.mode;
+  });
+});
+
+// ── 카메라 시작 ──
+document.getElementById('startBtn').addEventListener('click', async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    // 캔버스 크기 설정
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    effectCanvas.width = window.innerWidth;
+    effectCanvas.height = window.innerHeight;
+
+    // 토치 켜기 시도
+    tryTorch(true);
+
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('cameraScreen').style.display = 'block';
+    updateModeIndicator();
+    startLivePreview();
+  } catch(e) {
+    alert('카메라 권한이 필요해요! 브라우저 설정에서 카메라를 허용해주세요.');
+  }
+});
+
+// ── 토치 제어 ──
+async function tryTorch(on) {
+  try {
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities();
+    if (caps.torch) {
+      await track.applyConstraints({ advanced: [{ torch: on }] });
+      torchOn = on;
+      document.getElementById('flashIndicator').textContent = on ? '🔦 ON' : '🔦 OFF';
+    }
+  } catch(e) {
+    console.log('토치 미지원');
+  }
+}
+
+document.getElementById('flashIndicator').addEventListener('click', () => {
+  tryTorch(!torchOn);
+});
+
+// ── 라이브 프리뷰 ──
+function startLivePreview() {
+  function draw() {
+    if (appState === 'ready') {
+      ctx.save();
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+    if (appState === 'ready') {
+      animFrame = requestAnimationFrame(draw);
+    }
+  }
+  draw();
+}
+
+// ── 그림자 캡처 ──
+document.getElementById('captureBtn').addEventListener('click', () => {
+  if (appState === 'ready') {
+    // 현재 프레임 캡처
+    ctx.save();
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    capturedImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    appState = 'captured';
+
+    if (animFrame) cancelAnimationFrame(animFrame);
+
+    // 그림자 영역 추출 (어두운 부분)
+    extractAndAnimateShadow();
+
+    updateStatus('captured');
+    showStateLabel('손을 빼세요!', 2000);
+
+  } else if (appState === 'captured') {
+    // 애니메이션 시작
+    appState = 'animating';
+    updateStatus('animating');
+    startAnimation();
+  }
+});
+
+// ── 그림자 추출 & 애니메이션 ──
+let shadowData = null;
+let shadowBounds = null;
+
+function extractAndAnimateShadow() {
+  if (!capturedImageData) return;
+
+  const data = capturedImageData.data;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // 어두운 픽셀(그림자)만 추출
+  const shadowPixels = new Uint8ClampedArray(data.length);
+  let minX = w, maxX = 0, minY = h, maxY = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i+1], b = data[i+2];
+    const brightness = (r + g + b) / 3;
+    const px = (i/4) % w;
+    const py = Math.floor((i/4) / w);
+
+    if (brightness < 80) { // 어두운 픽셀 = 그림자
+      shadowPixels[i] = r;
+      shadowPixels[i+1] = g;
+      shadowPixels[i+2] = b;
+      shadowPixels[i+3] = 255;
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    } else {
+      shadowPixels[i+3] = 0; // 투명
+    }
+  }
+
+  shadowData = new ImageData(shadowPixels, w, h);
+  shadowBounds = { minX, maxX, minY, maxY, 
+    cx: (minX+maxX)/2, cy: (minY+maxY)/2,
+    w: maxX-minX, h: maxY-minY };
+
+  // effectCanvas에 그림자만 그리기
+  ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+  ectx.putImageData(shadowData, 0, 0);
+}
+
+// ── 애니메이션 시작 ──
+function startAnimation() {
+  switch(selectedMode) {
+    case 'horror': animateHorror(); break;
+    case 'cute': animateCute(); break;
+    case 'scifi': animateScifi(); break;
+    case 'liquid': animateLiquid(); break;
+  }
+}
+
+// 🎬 공포 모드
+function animateHorror() {
+  document.getElementById('horrorVignette').classList.add('active');
+  effectCanvas.classList.add('flickering');
+
+  let startTime = null;
+  const duration = 5000; // 5초
+  let offsetX = 0, offsetY = 0;
+  let shakePhase = 0;
+
+  function frame(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+
+    // 흔들림
+    shakePhase += 0.3;
+    if (progress > 0.3) {
+      offsetX = Math.sin(shakePhase * 7) * (progress * 8);
+      offsetY = Math.cos(shakePhase * 5) * (progress * 5);
+    }
+
+    // 그림자 그리기 (천천히 아래로 이동)
+    const driftY = progress * 30;
+    const alpha = 1 - Math.pow(progress, 2);
+
+    ectx.save();
+    ectx.globalAlpha = alpha;
+    ectx.translate(offsetX, offsetY + driftY);
+    ectx.putImageData(shadowData, 0, 0);
+    ectx.restore();
+
+    // 붉은 눈 효과 (중간에)
+    if (progress > 0.4 && progress < 0.7) {
+      const eyeAlpha = Math.sin((progress - 0.4) / 0.3 * Math.PI);
+      if (shadowBounds) {
+        ectx.save();
+        ectx.globalAlpha = eyeAlpha * 0.8;
+        ectx.fillStyle = '#ff0000';
+        ectx.shadowColor = '#ff0000';
+        ectx.shadowBlur = 20;
+        ectx.beginPath();
+        ectx.arc(shadowBounds.cx - 20 + offsetX, shadowBounds.cy - 10 + driftY + offsetY, 8, 0, Math.PI*2);
+        ectx.fill();
+        ectx.beginPath();
+        ectx.arc(shadowBounds.cx + 20 + offsetX, shadowBounds.cy - 10 + driftY + offsetY, 8, 0, Math.PI*2);
+        ectx.fill();
+        ectx.restore();
+      }
+    }
+
+    if (progress < 1) {
+      animFrame = requestAnimationFrame(frame);
+    } else {
+      // 점프스케어
+      jumpScare();
+    }
+  }
+  animFrame = requestAnimationFrame(frame);
+}
+
+function jumpScare() {
+  ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+  effectCanvas.classList.remove('flickering');
+
+  // 화면 전체 붉게
+  ectx.fillStyle = 'rgba(200,0,0,0.4)';
+  ectx.fillRect(0, 0, effectCanvas.width, effectCanvas.height);
+
+  // 크게 확대된 그림자
+  if (shadowData && shadowBounds) {
+    ectx.save();
+    ectx.translate(effectCanvas.width/2, effectCanvas.height/2);
+    ectx.scale(1.5, 1.5);
+    ectx.translate(-effectCanvas.width/2, -effectCanvas.height/2);
+    ectx.putImageData(shadowData, 0, 0);
+    ectx.restore();
+  }
+
+  showStateLabel('😱', 500);
+
+  setTimeout(() => {
+    document.getElementById('horrorVignette').classList.remove('active');
+    ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+    appState = 'ready';
+    updateStatus('ready');
+    startLivePreview();
+  }, 800);
+}
+
+// 🎬 귀여운 모드
+function animateCute() {
+  let startTime = null;
+  const duration = 4000;
+  let heartTimer = 0;
+
+  function frame(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+
+    // 통통 점프
+    const bounce = Math.abs(Math.sin(elapsed * 0.005)) * 20;
+    const alpha = progress < 0.8 ? 1 : 1 - (progress - 0.8) / 0.2;
+    const scale = 1 + Math.sin(elapsed * 0.004) * 0.05;
+
+    ectx.save();
+    ectx.globalAlpha = alpha;
+    if (shadowBounds) {
+      ectx.translate(shadowBounds.cx, shadowBounds.cy + shadowBounds.h/2);
+      ectx.scale(scale, scale);
+      ectx.translate(-shadowBounds.cx, -shadowBounds.cy - shadowBounds.h/2);
+    }
+    ectx.translate(0, -bounce);
+    ectx.putImageData(shadowData, 0, 0);
+
+    // 눈 그리기
+    if (shadowBounds) {
+      ectx.fillStyle = '#fff';
+      ectx.font = 'bold 28px Arial';
+      ectx.textAlign = 'center';
+      const eyeY = shadowBounds.cy - bounce - shadowBounds.h * 0.1;
+      ectx.fillText('👀', shadowBounds.cx, eyeY);
+    }
+    ectx.restore();
+
+    // 하트 파티클 주기적으로
+    heartTimer += 16;
+    if (heartTimer > 400 && shadowBounds) {
+      heartTimer = 0;
+      spawnParticle(
+        shadowBounds.cx + (Math.random()-0.5)*60,
+        shadowBounds.cy - bounce - shadowBounds.h/2,
+        ['❤️','✨','⭐','💫'][Math.floor(Math.random()*4)]
+      );
+    }
+
+    if (progress < 1) {
+      animFrame = requestAnimationFrame(frame);
+    } else {
+      ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+      appState = 'ready';
+      updateStatus('ready');
+      startLivePreview();
+    }
+  }
+  animFrame = requestAnimationFrame(frame);
+}
+
+function spawnParticle(x, y, emoji) {
+  const el = document.createElement('div');
+  el.className = 'particle';
+  el.textContent = emoji;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  document.getElementById('cameraScreen').appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+}
+
+// 🎬 SF 모드
+function animateScifi() {
+  // 스캔 라인 추가
+  const scanLine = document.createElement('div');
+  scanLine.className = 'scan-line';
+  document.getElementById('cameraScreen').appendChild(scanLine);
+
+  let startTime = null;
+  const duration = 4000;
+  let glitchTimer = 0;
+  let glitchActive = false;
+
+  function frame(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+
+    // 픽셀 분해 효과
+    const dissolveThreshold = progress;
+    
+    if (shadowData) {
+      // 원본 그림자를 픽셀 단위로 랜덤 제거
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tctx = tempCanvas.getContext('2d');
+      tctx.putImageData(shadowData, 0, 0);
+
+      // 글리치 오프셋
+      glitchTimer += 16;
+      let glitchX = 0;
+      if (glitchTimer > 300) {
+        glitchTimer = 0;
+        glitchActive = !glitchActive;
+      }
+      if (glitchActive) glitchX = (Math.random() - 0.5) * 20;
+
+      // 사이안 색조
+      ectx.save();
+      ectx.globalAlpha = 1 - progress * 0.8;
+      ectx.globalCompositeOperation = 'source-over';
+      ectx.translate(glitchX, 0);
+      ectx.drawImage(tempCanvas, 0, 0);
+      ectx.restore();
+
+      // 사이안 글로우
+      ectx.save();
+      ectx.globalAlpha = (1 - progress) * 0.5;
+      ectx.globalCompositeOperation = 'screen';
+      ectx.fillStyle = '#7DF9FF';
+      ectx.translate(glitchX + 2, 0);
+      ectx.drawImage(tempCanvas, 0, 0);
+      ectx.restore();
+    }
+
+    // 분해 파티클
+    if (shadowBounds && progress > 0.2) {
+      const count = Math.floor(progress * 15);
+      for (let i = 0; i < count; i++) {
+        const px = shadowBounds.minX + Math.random() * shadowBounds.w;
+        const py = shadowBounds.minY + Math.random() * shadowBounds.h;
+        const size = Math.random() * 4 + 1;
+        ectx.fillStyle = `rgba(125,249,255,${Math.random() * 0.8})`;
+        ectx.fillRect(px + (Math.random()-0.5)*30*progress, py - progress*20, size, size);
+      }
+    }
+
+    if (progress < 1) {
+      animFrame = requestAnimationFrame(frame);
+    } else {
+      scanLine.remove();
+      ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+      appState = 'ready';
+      updateStatus('ready');
+      startLivePreview();
+    }
+  }
+  animFrame = requestAnimationFrame(frame);
+}
+
+// 🎬 액체 모드
+function animateLiquid() {
+  let startTime = null;
+  const duration = 4000;
+
+  function frame(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+
+    if (shadowData && shadowBounds) {
+      const h = canvas.height;
+      const drip = progress * h * 0.4;
+      const squeeze = 1 + progress * 0.3;
+      const alpha = 1 - Math.pow(progress, 1.5);
+
+      // 물결 효과 - 여러 레이어
+      for (let layer = 0; layer < 3; layer++) {
+        const layerOffset = layer * 15 * progress;
+        const waveX = Math.sin(elapsed * 0.003 + layer) * 10 * progress;
+
+        ectx.save();
+        ectx.globalAlpha = alpha * (1 - layer * 0.2);
+        ectx.translate(waveX, drip + layerOffset);
+        ectx.transform(squeeze, 0, 0, 1 - progress * 0.3, 
+          -(squeeze-1)*shadowBounds.cx, 0);
+        ectx.putImageData(shadowData, 0, 0);
+        ectx.restore();
+      }
+
+      // 물방울 효과
+      if (progress > 0.3) {
+        const dropCount = Math.floor(progress * 8);
+        for (let i = 0; i < dropCount; i++) {
+          const dropX = shadowBounds.minX + (i / dropCount) * shadowBounds.w + Math.sin(elapsed*0.004+i)*15;
+          const dropY = shadowBounds.maxY + drip + i * 20 * progress;
+          const dropSize = (4 - i*0.3) * (1-progress);
+
+          if (dropSize > 0) {
+            ectx.save();
+            ectx.fillStyle = `rgba(50,50,80,${alpha * 0.8})`;
+            ectx.beginPath();
+            ectx.ellipse(dropX, dropY, dropSize, dropSize*1.5, 0, 0, Math.PI*2);
+            ectx.fill();
+            ectx.restore();
+          }
+        }
+      }
+    }
+
+    if (progress < 1) {
+      animFrame = requestAnimationFrame(frame);
+    } else {
+      ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+      appState = 'ready';
+      updateStatus('ready');
+      startLivePreview();
+    }
+  }
+  animFrame = requestAnimationFrame(frame);
+}
+
+// ── UI 업데이트 ──
+function updateStatus(state) {
+  const step = document.getElementById('statusStep');
+  const text = document.getElementById('statusText');
+  const captureBtn = document.getElementById('captureBtn');
+
+  if (state === 'ready') {
+    step.textContent = 'STEP 1';
+    text.textContent = '플래시를 벽이나 책상에 비추고\n손이나 물체로 그림자를 만드세요';
+    captureBtn.textContent = '📸';
+    appState = 'ready';
+  } else if (state === 'captured') {
+    step.textContent = 'STEP 2';
+    text.textContent = '그림자가 잘 보이면\n손/물체를 빠르게 빼세요!\n그리고 버튼을 누르세요';
+    captureBtn.textContent = '▶️';
+  } else if (state === 'animating') {
+    step.textContent = '✨ 살아있다!';
+    text.textContent = '그림자가 움직이고 있어요...';
+    captureBtn.textContent = '⏹';
+  }
+}
+
+function showStateLabel(text, duration) {
+  const label = document.getElementById('stateLabel');
+  label.textContent = text;
+  label.classList.add('visible');
+  setTimeout(() => label.classList.remove('visible'), duration);
+}
+
+function updateModeIndicator() {
+  const icons = { horror: '👻 공포', cute: '🐱 귀여운', scifi: '⚡ SF', liquid: '🌊 액체' };
+  document.getElementById('modeIndicator').textContent = icons[selectedMode];
+}
+
+// ── 리셋 ──
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  ectx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+  document.getElementById('horrorVignette').classList.remove('active');
+  effectCanvas.classList.remove('flickering', 'shaking');
+  shadowData = null;
+  shadowBounds = null;
+  capturedImageData = null;
+  appState = 'ready';
+  updateStatus('ready');
+  startLivePreview();
+});
+
+// ── 뒤로가기 ──
+document.getElementById('backBtn').addEventListener('click', () => {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  document.getElementById('cameraScreen').style.display = 'none';
+  document.getElementById('startScreen').style.display = 'flex';
+  appState = 'ready';
+});
+</script>
+</body>
+</html>
