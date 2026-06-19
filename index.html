@@ -328,7 +328,7 @@ const GESTURES = [
   { id: 'victory',  emoji: '✌️', name: '브이 사인',   color: '#7df2ff', placeholder: '생일 축하해 🎂' },
   { id: 'thumbsup', emoji: '👍', name: '엄지척',       color: '#ffd66b', placeholder: '최고야!' },
   { id: 'ok',       emoji: '👌', name: '오케이',       color: '#b18cff', placeholder: '잘하고 있어' },
-  { id: 'fist',     emoji: '✊', name: '주먹',         color: '#6bffb0', placeholder: '파이팅!' },
+  { id: 'highfive', emoji: '✋', name: '하이파이브',   color: '#6bffb0', placeholder: '안녕!' },
 ];
 
 // ── 설정 화면 렌더 ──
@@ -458,14 +458,19 @@ function classifyGesture(lm) {
   const thumbIndexDist = dist(thumbTip, indexTip);
   const otherExtCount = [middleExt, ringExt, pinkyExt].filter(Boolean).length;
 
-  // 손가락 하트: 엄지+검지 끝이 매우 가까움 (손바닥/손등 방향 무관, 최우선 판정)
-  // 중지/약지/소지가 펴져있지 않을 때 (오케이 사인과 구분)
-  if (thumbIndexDist < 0.075 && otherExtCount === 0) {
+  // 하이파이브: 4손가락 다 펴짐 (손가락 하트/오케이보다 먼저 체크 — 손 펼친 상태가 더 명확함)
+  if (indexExt && middleExt && ringExt && pinkyExt) {
+    return 'highfive';
+  }
+
+  // 손가락 하트: 엄지+검지 끝이 가까움. 손바닥/손등 어느 방향이든 인식.
+  // 주먹이 없으니 임계값을 넉넉하게 잡아도 다른 제스처와 안 헷갈림
+  if (thumbIndexDist < 0.1 && otherExtCount === 0) {
     return 'heart';
   }
 
   // 오케이: 엄지+검지 닿고, 중지/약지/소지 중 2개 이상 펴짐
-  if (thumbIndexDist < 0.09 && otherExtCount >= 2) {
+  if (thumbIndexDist < 0.1 && otherExtCount >= 2) {
     return 'ok';
   }
 
@@ -474,11 +479,10 @@ function classifyGesture(lm) {
     return 'victory';
   }
 
-  // 검지/중지/약지/소지 다 접힘 → 엄지척 또는 주먹
+  // 엄지척: 검지/중지/약지/소지 다 접힘, 엄지가 위로 향함
   if (!indexExt && !middleExt && !ringExt && !pinkyExt) {
     const thumbUp = thumbTip.y < lm[2].y - 0.02;
-    if (thumbUp) return 'thumbsup';
-    return 'fist';
+    if (thumbUp && thumbIndexDist > 0.08) return 'thumbsup';
   }
 
   return null;
@@ -507,7 +511,7 @@ function detectLoop() {
       const ringExt = fingerExtended(lm, 16, 14, 13);
       const pinkyExt = fingerExtended(lm, 20, 18, 17);
       const thumbIndexDist = dist(lm[4], lm[8]).toFixed(3);
-      rawInfo = `손 감지됨! idx:${indexExt?1:0} mid:${middleExt?1:0} ring:${ringExt?1:0} pink:${pinkyExt?1:0} thumbDist:${thumbIndexDist} => ${detected || '없음'}`;
+      rawInfo = `idx:${indexExt?1:0} mid:${middleExt?1:0} ring:${ringExt?1:0} pink:${pinkyExt?1:0} thumbDist:${thumbIndexDist} => ${detected || '없음'}`;
     }
     updateDebugLine(rawInfo);
 
@@ -623,7 +627,7 @@ function fireMessage(id) {
 
 function spawnParticles(g) {
   const container = document.getElementById('cameraScreen');
-  const emojiSet = { heart: ['❤️','💕','✨'], victory: ['🎉','✨','🎊'], thumbsup: ['👍','⭐','✨'], ok: ['✨','💫','🌟'], fist: ['✊','💪','✨'] };
+  const emojiSet = { heart: ['❤️','💕','✨'], victory: ['🎉','✨','🎊'], thumbsup: ['👍','⭐','✨'], ok: ['✨','💫','🌟'], highfive: ['✋','👋','✨'] };
   const set = emojiSet[g.id] || ['✨'];
   for (let i = 0; i < 14; i++) {
     setTimeout(() => {
