@@ -465,7 +465,7 @@ function classifyGesture(lm) {
 
   // 손가락 하트: 엄지+검지 끝이 가까움. 손바닥/손등 어느 방향이든 인식.
   // 주먹이 없으니 임계값을 넉넉하게 잡아도 다른 제스처와 안 헷갈림
-  if (thumbIndexDist < 0.1 && otherExtCount === 0) {
+  if (thumbIndexDist < 0.15 && otherExtCount === 0) {
     return 'heart';
   }
 
