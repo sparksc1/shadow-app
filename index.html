@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>제스처 메시지</title>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.js" crossorigin="anonymous"></script>
+<script type="module">
+import { HandLandmarker, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm';
+window.HandLandmarker = HandLandmarker;
+window.FilesetResolver = FilesetResolver;
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -296,14 +300,25 @@
 </div>
 
 <script type="module">
-const { HandLandmarker, FilesetResolver } = window.vision || {};
-
 function dbg(msg) {
   const panel = document.getElementById('debugPanel');
   if (panel) panel.textContent += msg + '\n';
   console.log(msg);
 }
-dbg('스크립트 시작. window.vision = ' + (window.vision ? 'OK' : 'MISSING'));
+
+// 모듈이 비동기로 window에 등록되므로 대기
+async function waitForVisionLibs(timeoutMs = 8000) {
+  const start = Date.now();
+  while (!window.HandLandmarker || !window.FilesetResolver) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('MediaPipe 라이브러리 로딩 타임아웃');
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return { HandLandmarker: window.HandLandmarker, FilesetResolver: window.FilesetResolver };
+}
+
+dbg('스크립트 시작.');
 
 // ── 제스처 정의 ──
 const GESTURES = [
@@ -397,7 +412,9 @@ function renderTray() {
 
 async function initHandLandmarker() {
   try {
-    dbg('FilesetResolver 로딩 시작...');
+    dbg('MediaPipe 라이브러리 대기 중...');
+    const { HandLandmarker, FilesetResolver } = await waitForVisionLibs();
+    dbg('라이브러리 로드 완료. FilesetResolver 초기화...');
     const vision = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
     );
