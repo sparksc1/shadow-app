@@ -290,12 +290,20 @@
   </div>
 
   <div class="detect-pill" id="detectPill"><span class="dot"></span>손짓을 찾고 있어요</div>
+  <div id="debugPanel" style="position:absolute;top:115px;left:10px;right:10px;background:rgba(0,0,0,0.8);color:#0f0;font-size:11px;padding:8px;border-radius:8px;z-index:50;max-height:200px;overflow:auto;font-family:monospace;white-space:pre-wrap;"></div>
 
   <div class="gesture-tray" id="gestureTray"></div>
 </div>
 
 <script type="module">
 const { HandLandmarker, FilesetResolver } = window.vision || {};
+
+function dbg(msg) {
+  const panel = document.getElementById('debugPanel');
+  if (panel) panel.textContent += msg + '\n';
+  console.log(msg);
+}
+dbg('스크립트 시작. window.vision = ' + (window.vision ? 'OK' : 'MISSING'));
 
 // ── 제스처 정의 ──
 const GESTURES = [
@@ -388,17 +396,25 @@ function renderTray() {
 }
 
 async function initHandLandmarker() {
-  const vision = await FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
-  );
-  handLandmarker = await HandLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-      delegate: 'GPU'
-    },
-    runningMode: 'VIDEO',
-    numHands: 1
-  });
+  try {
+    dbg('FilesetResolver 로딩 시작...');
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    dbg('FilesetResolver 완료. HandLandmarker 생성 중...');
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+        delegate: 'GPU'
+      },
+      runningMode: 'VIDEO',
+      numHands: 1
+    });
+    dbg('HandLandmarker 준비 완료!');
+  } catch (e) {
+    dbg('에러 발생: ' + e.message);
+    dbg(e.stack || '');
+  }
 }
 
 // ── 손가락 펴짐 판정 ──
