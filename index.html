@@ -184,6 +184,28 @@ window.FilesetResolver = FilesetResolver;
     z-index: 10;
     padding: 0 16px;
   }
+
+  .photo-btn {
+    position: absolute;
+    bottom: 26px; left: 18px;
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.95);
+    border: 3px solid rgba(255,255,255,0.4);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    z-index: 12;
+  }
+  .photo-btn:active { transform: scale(0.92); }
+
+  .photo-flash {
+    position: absolute; inset: 0;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 40;
+  }
   .tray-chip {
     background: rgba(20,16,30,0.65);
     border: 1px solid rgba(255,255,255,0.12);
@@ -294,17 +316,15 @@ window.FilesetResolver = FilesetResolver;
   </div>
 
   <div class="detect-pill" id="detectPill"><span class="dot"></span>손짓을 찾고 있어요</div>
-  <button id="snapBtn" style="position:absolute;top:115px;right:10px;z-index:51;background:#7d5fff;color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:11px;">📸 캡처</button>
-  <div id="debugPanel" style="position:absolute;top:115px;left:10px;right:80px;background:rgba(0,0,0,0.8);color:#0f0;font-size:11px;padding:8px;border-radius:8px;z-index:50;max-height:160px;overflow:auto;font-family:monospace;white-space:pre-wrap;"></div>
-  <canvas id="snapCanvas" style="display:none;position:absolute;top:280px;left:10px;right:10px;z-index:52;border:2px solid #7d5fff;border-radius:8px;max-height:300px;"></canvas>
+
+  <div class="photo-flash" id="photoFlash"></div>
+  <button class="photo-btn" id="photoBtn">📷</button>
 
   <div class="gesture-tray" id="gestureTray"></div>
 </div>
 
 <script type="module">
 function dbg(msg) {
-  const panel = document.getElementById('debugPanel');
-  if (panel) panel.textContent += msg + '\n';
   console.log(msg);
 }
 
@@ -333,16 +353,31 @@ const GESTURES = [
 
 // ── 설정 화면 렌더 ──
 const gestureList = document.getElementById('gestureList');
-const messages = {}; // id -> text
+const STORAGE_KEY = 'gestureMessages_v1';
+let messages = {}; // id -> text
+
+function loadSavedMessages() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) messages = JSON.parse(saved);
+  } catch(e) { /* ignore */ }
+}
+function saveMessages() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  } catch(e) { /* ignore */ }
+}
+loadSavedMessages();
 
 GESTURES.forEach(g => {
   const row = document.createElement('div');
   row.className = 'gesture-row';
+  const savedVal = messages[g.id] || '';
   row.innerHTML = `
     <div class="gesture-emoji">${g.emoji}</div>
     <div class="gesture-meta">
       <div class="gesture-label">${g.name}</div>
-      <input class="gesture-input" type="text" maxlength="24" placeholder="${g.placeholder}" data-id="${g.id}">
+      <input class="gesture-input" type="text" maxlength="24" placeholder="${g.placeholder}" data-id="${g.id}" value="${savedVal.replace(/"/g,'&quot;')}">
     </div>
   `;
   gestureList.appendChild(row);
@@ -351,6 +386,7 @@ GESTURES.forEach(g => {
 gestureList.addEventListener('input', (e) => {
   if (e.target.classList.contains('gesture-input')) {
     messages[e.target.dataset.id] = e.target.value.trim();
+    saveMessages();
   }
 });
 
@@ -526,14 +562,7 @@ function detectLoop() {
 
 let lastDebugLine = '';
 function updateDebugLine(text) {
-  if (text === lastDebugLine) return;
   lastDebugLine = text;
-  const panel = document.getElementById('debugPanel');
-  if (panel) {
-    const lines = panel.textContent.split('\n').filter(l => !l.startsWith('LIVE:'));
-    lines.push('LIVE: ' + text);
-    panel.textContent = lines.slice(-8).join('\n');
-  }
 }
 
 function handleDetection(detected, now) {
@@ -591,6 +620,8 @@ function fireMessage(id) {
   const msgEl = document.getElementById('messageText');
   const veil = document.getElementById('glowVeil');
 
+  currentDisplayedMessage = { text, color: g.color };
+
   msgEl.textContent = text;
   msgEl.style.color = '#fff';
   msgEl.style.textShadow = `0 0 30px ${g.color}, 0 2px 12px rgba(0,0,0,0.5)`;
@@ -622,6 +653,7 @@ function fireMessage(id) {
     veil.style.transition = 'opacity 0.6s ease-in';
     overlay.style.opacity = '0';
     veil.style.opacity = '0';
+    currentDisplayedMessage = null;
   }, 2200);
 }
 
@@ -654,20 +686,74 @@ function spawnParticles(g) {
   }
 }
 
-// ── 디버그 캡처 버튼 ──
-document.getElementById('snapBtn').addEventListener('click', () => {
-  const snapCanvas = document.getElementById('snapCanvas');
-  snapCanvas.width = video.videoWidth;
-  snapCanvas.height = video.videoHeight;
-  const sctx = snapCanvas.getContext('2d');
-  sctx.save();
-  sctx.translate(snapCanvas.width, 0);
-  sctx.scale(-1, 1);
-  sctx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
-  sctx.restore();
-  snapCanvas.style.display = 'block';
-  dbg(`캡처: video ${video.videoWidth}x${video.videoHeight}, readyState=${video.readyState}`);
+// ── 사진 촬영 ──
+let currentDisplayedMessage = null; // {text, color} 현재 화면에 떠있는 메시지
+
+document.getElementById('photoBtn').addEventListener('click', () => {
+  takePhoto();
 });
+
+function takePhoto() {
+  const flash = document.getElementById('photoFlash');
+  flash.style.transition = 'none';
+  flash.style.opacity = '0.85';
+  requestAnimationFrame(() => {
+    flash.style.transition = 'opacity 0.3s ease-out';
+    flash.style.opacity = '0';
+  });
+
+  const W = video.videoWidth, H = video.videoHeight;
+  if (!W || !H) return;
+
+  const shot = document.createElement('canvas');
+  shot.width = W; shot.height = H;
+  const sctx = shot.getContext('2d');
+
+  // 셀카 좌우반전 비디오 그대로 캡처 (화면에 보이는 대로)
+  sctx.save();
+  sctx.translate(W, 0);
+  sctx.scale(-1, 1);
+  sctx.drawImage(video, 0, 0, W, H);
+  sctx.restore();
+
+  // 현재 메시지가 떠있다면 합성
+  if (currentDisplayedMessage) {
+    const fontSize = Math.round(W * 0.085);
+    sctx.font = `800 ${fontSize}px -apple-system, sans-serif`;
+    sctx.textAlign = 'center';
+    sctx.textBaseline = 'middle';
+    sctx.fillStyle = '#fff';
+    sctx.shadowColor = currentDisplayedMessage.color;
+    sctx.shadowBlur = fontSize * 0.4;
+    wrapText(sctx, currentDisplayedMessage.text, W/2, H/2, W*0.86, fontSize*1.25);
+  }
+
+  const dataUrl = shot.toDataURL('image/jpeg', 0.92);
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = `gesture-message-${Date.now()}.jpg`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function wrapText(ctx, text, cx, cy, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  const startY = cy - (lines.length - 1) * lineHeight / 2;
+  lines.forEach((l, i) => ctx.fillText(l, cx, startY + i * lineHeight));
+}
 
 // ── 뒤로가기 ──
 document.getElementById('backBtn').addEventListener('click', () => {
