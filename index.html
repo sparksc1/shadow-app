@@ -247,7 +247,8 @@ window.FilesetResolver = FilesetResolver;
   /* 메시지 등장 */
   #messageOverlay {
     position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 18%;
     z-index: 20;
     pointer-events: none;
     opacity: 0;
@@ -714,7 +715,7 @@ function takePhoto() {
     sctx.fillStyle = '#fff';
     sctx.shadowColor = currentDisplayedMessage.color;
     sctx.shadowBlur = fontSize * 0.4;
-    wrapText(sctx, currentDisplayedMessage.text, W/2, H/2, W*0.86, fontSize*1.25);
+    wrapText(sctx, currentDisplayedMessage.text, W/2, H*0.27, W*0.86, fontSize*1.25);
   }
 
   const dataUrl = shot.toDataURL('image/jpeg', 0.92);
