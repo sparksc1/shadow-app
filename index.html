@@ -769,12 +769,19 @@ function updateDebugLine(text) {
   lastDebugLine = text;
 }
 
+let displayedGestureId = null; // 현재 메시지가 떠있는 제스처 id
+
 function handleDetection(detected, now) {
-  // 쿨다운 중이면 트레이만 정리
-  if (now < fireLockUntil) {
-    updateTrayUI(null);
-    updatePill('잠시만요...');
-    return;
+  // 이미 메시지가 떠있는 상태라면: 같은 제스처가 유지되는 동안 계속 유지
+  if (displayedGestureId) {
+    if (detected === displayedGestureId) {
+      armedSince = now; // 계속 유지중
+      return;
+    } else {
+      // 손을 내렸거나 다른 제스처로 바뀜 → 메시지 종료
+      endMessage();
+      // 그대로 아래 로직으로 진행해서 새 제스처 판정 가능
+    }
   }
 
   if (detected) {
@@ -789,10 +796,10 @@ function handleDetection(detected, now) {
     if (held < HOLD_MS) {
       updatePill(`${g.emoji} 조금만 더 유지해주세요`);
     } else {
-      // 발동!
+      // 발동! 메시지 표시 시작 (유지형)
       fireMessage(detected);
+      displayedGestureId = detected;
       armedGesture = null;
-      fireLockUntil = now + COOLDOWN_MS;
     }
   } else {
     armedGesture = null;
@@ -852,14 +859,26 @@ function fireMessage(id) {
     msgEl.style.transform = 'scale(1) translateY(0)';
   });
 
-  setTimeout(() => {
-    overlay.style.transition = 'opacity 0.6s ease-in';
-    veil.style.transition = 'opacity 0.6s ease-in';
-    overlay.style.opacity = '0';
-    veil.style.opacity = '0';
-    currentDisplayedMessage = null;
-  }, 2200);
+  // 제스처가 유지되는 동안 파티클을 주기적으로 재생
+  if (sustainParticleInterval) clearInterval(sustainParticleInterval);
+  sustainParticleInterval = setInterval(() => spawnParticles(g), 1400);
 }
+
+function endMessage() {
+  const overlay = document.getElementById('messageOverlay');
+  const veil = document.getElementById('glowVeil');
+  overlay.style.transition = 'opacity 0.5s ease-in';
+  veil.style.transition = 'opacity 0.5s ease-in';
+  overlay.style.opacity = '0';
+  veil.style.opacity = '0';
+  currentDisplayedMessage = null;
+  displayedGestureId = null;
+  if (sustainParticleInterval) {
+    clearInterval(sustainParticleInterval);
+    sustainParticleInterval = null;
+  }
+}
+let sustainParticleInterval = null;
 
 function spawnParticles(g) {
   const container = document.getElementById('cameraScreen');
