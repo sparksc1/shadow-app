@@ -24,22 +24,22 @@ window.FilesetResolver = FilesetResolver;
     height: 100vh;
     display: flex;
     flex-direction: column;
-    padding: 28px 22px 24px;
+    padding: 18px 20px 16px;
     overflow-y: auto;
   }
 
   .brand {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     letter-spacing: 3px;
     color: #b18cff;
     font-weight: 700;
     text-transform: uppercase;
   }
   .headline {
-    font-size: 1.85rem;
+    font-size: 1.5rem;
     font-weight: 800;
-    margin-top: 6px;
-    line-height: 1.25;
+    margin-top: 4px;
+    line-height: 1.2;
     letter-spacing: -0.5px;
   }
   .headline em {
@@ -50,22 +50,22 @@ window.FilesetResolver = FilesetResolver;
     color: transparent;
   }
   .sub {
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     color: #8d84a8;
-    margin-top: 8px;
-    line-height: 1.6;
+    margin-top: 6px;
+    line-height: 1.45;
   }
 
   .gesture-list {
-    margin-top: 26px;
+    margin-top: 14px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 9px;
   }
 
   /* 프리셋 영역 */
   .preset-bar {
-    margin-top: 22px;
+    margin-top: 12px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -140,21 +140,21 @@ window.FilesetResolver = FilesetResolver;
   .gesture-row {
     background: #16121f;
     border: 1px solid #261f37;
-    border-radius: 18px;
-    padding: 14px 16px;
+    border-radius: 16px;
+    padding: 10px 14px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
     transition: border-color 0.2s;
   }
   .gesture-row:focus-within { border-color: #7d5fff; }
 
   .gesture-emoji {
-    width: 46px; height: 46px;
-    border-radius: 13px;
+    width: 38px; height: 38px;
+    border-radius: 11px;
     background: #211a33;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     flex-shrink: 0;
   }
   .gesture-meta { flex: 1; min-width: 0; }
@@ -192,7 +192,7 @@ window.FilesetResolver = FilesetResolver;
 
   .start-cta {
     margin-top: auto;
-    padding-top: 24px;
+    padding-top: 14px;
   }
   .start-btn {
     width: 100%;
@@ -362,7 +362,7 @@ window.FilesetResolver = FilesetResolver;
 
   <div class="preset-bar">
     <select class="preset-select" id="presetSelect">
-      <option value="">현재 작성중</option>
+      <option value="">새로 작성</option>
     </select>
     <button class="preset-btn" id="presetSaveBtn">💾 저장</button>
     <button class="preset-btn danger" id="presetDeleteBtn">삭제</button>
@@ -437,7 +437,7 @@ const GESTURES = [
 const gestureList = document.getElementById('gestureList');
 const STORAGE_KEY = 'gestureMessages_v1';
 const PRESETS_KEY = 'gesturePresets_v1';
-let messages = {}; // id -> text (현재 작성중인 것)
+let messages = {}; // id -> text (새로 작성인 것)
 let presets = {};  // presetName -> {id: text, ...}
 
 function loadSavedMessages() {
@@ -469,7 +469,7 @@ loadPresets();
 
 function renderPresetOptions() {
   const sel = document.getElementById('presetSelect');
-  sel.innerHTML = '<option value="">현재 작성중</option>';
+  sel.innerHTML = '<option value="">새로 작성</option>';
   Object.keys(presets).forEach(name => {
     const opt = document.createElement('option');
     opt.value = name;
@@ -507,7 +507,13 @@ gestureList.addEventListener('input', (e) => {
 // 프리셋 선택 → 불러오기
 document.getElementById('presetSelect').addEventListener('change', (e) => {
   const name = e.target.value;
-  if (!name) return; // "현재 작성중" 선택시 그대로
+  if (!name) {
+    // 새로 작성 → 모두 빈칸으로
+    messages = {};
+    saveMessages();
+    renderGestureInputs();
+    return;
+  }
   if (presets[name]) {
     messages = { ...presets[name] };
     saveMessages();
