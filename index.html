@@ -94,12 +94,26 @@ window.FilesetResolver = FilesetResolver;
     white-space: nowrap;
   }
   .preset-btn.danger { color: #ff7d9c; }
-  .preset-label {
-    font-size: 0.68rem;
-    color: #8d84a8;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
+  .preset-save-modal {
+    display: none;
+    margin-top: 8px;
+    gap: 8px;
+    align-items: center;
+  }
+  .preset-save-modal.visible {
+    display: flex;
+  }
+  .preset-name-input {
+    flex: 1;
+    background: #16121f;
+    border: 1px solid #7d5fff;
+    border-radius: 14px;
+    padding: 11px 12px;
+    color: #f4f0ff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    outline: none;
   }
   .preset-save-modal {
     display: none;
@@ -346,7 +360,6 @@ window.FilesetResolver = FilesetResolver;
   <div class="headline">손짓 하나로<br><em>마음</em>을 보여줘</div>
   <div class="sub">제스처마다 보여줄 말을 적어두면<br>셀카 찍다가 그 손짓을 하는 순간 화면에 떠올라요.</div>
 
-  <div class="preset-label">메시지 세트</div>
   <div class="preset-bar">
     <select class="preset-select" id="presetSelect">
       <option value="">현재 작성중</option>
