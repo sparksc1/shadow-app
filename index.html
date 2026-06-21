@@ -101,6 +101,27 @@ window.FilesetResolver = FilesetResolver;
     letter-spacing: 0.5px;
     margin-bottom: 8px;
   }
+  .preset-save-modal {
+    display: none;
+    margin-top: 8px;
+    gap: 8px;
+    align-items: center;
+  }
+  .preset-save-modal.visible {
+    display: flex;
+  }
+  .preset-name-input {
+    flex: 1;
+    background: #16121f;
+    border: 1px solid #7d5fff;
+    border-radius: 14px;
+    padding: 11px 12px;
+    color: #f4f0ff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    outline: none;
+  }
 
   .gesture-row {
     background: #16121f;
@@ -334,6 +355,12 @@ window.FilesetResolver = FilesetResolver;
     <button class="preset-btn danger" id="presetDeleteBtn">삭제</button>
   </div>
 
+  <div class="preset-save-modal" id="presetSaveModal">
+    <input type="text" id="presetNameInput" class="preset-name-input" maxlength="20" placeholder="예: 큰딸에게, 막내에게">
+    <button class="preset-btn" id="presetConfirmBtn">확인</button>
+    <button class="preset-btn danger" id="presetCancelBtn">취소</button>
+  </div>
+
   <div class="gesture-list" id="gestureList">
     <!-- JS로 채움 -->
   </div>
@@ -415,12 +442,14 @@ function loadPresets() {
   try {
     const saved = localStorage.getItem(PRESETS_KEY);
     if (saved) presets = JSON.parse(saved);
-  } catch(e) { /* ignore */ }
+    console.log('프리셋 로드:', presets);
+  } catch(e) { console.error('프리셋 로드 에러', e); }
 }
 function savePresets() {
   try {
     localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
-  } catch(e) { /* ignore */ }
+    console.log('프리셋 저장됨:', presets);
+  } catch(e) { console.error('프리셋 저장 에러', e); }
 }
 loadSavedMessages();
 loadPresets();
@@ -473,20 +502,45 @@ document.getElementById('presetSelect').addEventListener('change', (e) => {
   }
 });
 
-// 프리셋 저장
+// 프리셋 저장 - 인라인 모달
 document.getElementById('presetSaveBtn').addEventListener('click', () => {
   const hasAny = GESTURES.some(g => messages[g.id] && messages[g.id].length > 0);
   if (!hasAny) {
     alert('저장할 문구가 없어요. 먼저 메시지를 입력해주세요!');
     return;
   }
+  const modal = document.getElementById('presetSaveModal');
+  const input = document.getElementById('presetNameInput');
   const defaultName = document.getElementById('presetSelect').value || '';
-  const name = prompt('이 메시지 세트를 저장할 이름을 입력해주세요\n(예: 큰딸에게, 막내에게, 생일축하용)', defaultName);
-  if (!name || !name.trim()) return;
-  presets[name.trim()] = { ...messages };
+  input.value = defaultName;
+  modal.classList.add('visible');
+  setTimeout(() => input.focus(), 50);
+});
+
+document.getElementById('presetCancelBtn').addEventListener('click', () => {
+  document.getElementById('presetSaveModal').classList.remove('visible');
+});
+
+function confirmSavePreset() {
+  const input = document.getElementById('presetNameInput');
+  const name = input.value.trim();
+  if (!name) {
+    input.focus();
+    return;
+  }
+  presets[name] = { ...messages };
   savePresets();
   renderPresetOptions();
-  document.getElementById('presetSelect').value = name.trim();
+  document.getElementById('presetSelect').value = name;
+  document.getElementById('presetSaveModal').classList.remove('visible');
+}
+
+document.getElementById('presetConfirmBtn').addEventListener('click', confirmSavePreset);
+document.getElementById('presetNameInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    confirmSavePreset();
+  }
 });
 
 // 프리셋 삭제
