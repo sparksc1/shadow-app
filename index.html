@@ -63,6 +63,45 @@ window.FilesetResolver = FilesetResolver;
     gap: 12px;
   }
 
+  /* 프리셋 영역 */
+  .preset-bar {
+    margin-top: 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .preset-select {
+    flex: 1;
+    background: #16121f;
+    border: 1px solid #261f37;
+    border-radius: 14px;
+    padding: 11px 12px;
+    color: #f4f0ff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .preset-btn {
+    background: #211a33;
+    border: 1px solid #2e2548;
+    color: #d8d0f0;
+    border-radius: 14px;
+    padding: 11px 14px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .preset-btn.danger { color: #ff7d9c; }
+  .preset-label {
+    font-size: 0.68rem;
+    color: #8d84a8;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
   .gesture-row {
     background: #16121f;
     border: 1px solid #261f37;
@@ -137,6 +176,13 @@ window.FilesetResolver = FilesetResolver;
     font-size: 0.74rem;
     color: #635a7d;
     margin-top: 12px;
+  }
+  @keyframes shakeHint {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
   }
 
   /* ===================== 카메라 화면 ===================== */
@@ -279,6 +325,15 @@ window.FilesetResolver = FilesetResolver;
   <div class="headline">손짓 하나로<br><em>마음</em>을 보여줘</div>
   <div class="sub">제스처마다 보여줄 말을 적어두면<br>셀카 찍다가 그 손짓을 하는 순간 화면에 떠올라요.</div>
 
+  <div class="preset-label">메시지 세트</div>
+  <div class="preset-bar">
+    <select class="preset-select" id="presetSelect">
+      <option value="">현재 작성중</option>
+    </select>
+    <button class="preset-btn" id="presetSaveBtn">💾 저장</button>
+    <button class="preset-btn danger" id="presetDeleteBtn">삭제</button>
+  </div>
+
   <div class="gesture-list" id="gestureList">
     <!-- JS로 채움 -->
   </div>
@@ -341,7 +396,9 @@ const GESTURES = [
 // ── 설정 화면 렌더 ──
 const gestureList = document.getElementById('gestureList');
 const STORAGE_KEY = 'gestureMessages_v1';
-let messages = {}; // id -> text
+const PRESETS_KEY = 'gesturePresets_v1';
+let messages = {}; // id -> text (현재 작성중인 것)
+let presets = {};  // presetName -> {id: text, ...}
 
 function loadSavedMessages() {
   try {
@@ -354,26 +411,96 @@ function saveMessages() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   } catch(e) { /* ignore */ }
 }
+function loadPresets() {
+  try {
+    const saved = localStorage.getItem(PRESETS_KEY);
+    if (saved) presets = JSON.parse(saved);
+  } catch(e) { /* ignore */ }
+}
+function savePresets() {
+  try {
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  } catch(e) { /* ignore */ }
+}
 loadSavedMessages();
+loadPresets();
 
-GESTURES.forEach(g => {
-  const row = document.createElement('div');
-  row.className = 'gesture-row';
-  const savedVal = messages[g.id] || '';
-  row.innerHTML = `
-    <div class="gesture-emoji">${g.emoji}</div>
-    <div class="gesture-meta">
-      <div class="gesture-label">${g.name}</div>
-      <input class="gesture-input" type="text" maxlength="24" placeholder="${g.placeholder}" data-id="${g.id}" value="${savedVal.replace(/"/g,'&quot;')}">
-    </div>
-  `;
-  gestureList.appendChild(row);
-});
+function renderPresetOptions() {
+  const sel = document.getElementById('presetSelect');
+  sel.innerHTML = '<option value="">현재 작성중</option>';
+  Object.keys(presets).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+}
+renderPresetOptions();
+
+function renderGestureInputs() {
+  gestureList.innerHTML = '';
+  GESTURES.forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'gesture-row';
+    const savedVal = messages[g.id] || '';
+    row.innerHTML = `
+      <div class="gesture-emoji">${g.emoji}</div>
+      <div class="gesture-meta">
+        <div class="gesture-label">${g.name}</div>
+        <input class="gesture-input" type="text" maxlength="24" placeholder="${g.placeholder}" data-id="${g.id}" value="${savedVal.replace(/"/g,'&quot;')}">
+      </div>
+    `;
+    gestureList.appendChild(row);
+  });
+}
+renderGestureInputs();
 
 gestureList.addEventListener('input', (e) => {
   if (e.target.classList.contains('gesture-input')) {
     messages[e.target.dataset.id] = e.target.value.trim();
     saveMessages();
+  }
+});
+
+// 프리셋 선택 → 불러오기
+document.getElementById('presetSelect').addEventListener('change', (e) => {
+  const name = e.target.value;
+  if (!name) return; // "현재 작성중" 선택시 그대로
+  if (presets[name]) {
+    messages = { ...presets[name] };
+    saveMessages();
+    renderGestureInputs();
+  }
+});
+
+// 프리셋 저장
+document.getElementById('presetSaveBtn').addEventListener('click', () => {
+  const hasAny = GESTURES.some(g => messages[g.id] && messages[g.id].length > 0);
+  if (!hasAny) {
+    alert('저장할 문구가 없어요. 먼저 메시지를 입력해주세요!');
+    return;
+  }
+  const defaultName = document.getElementById('presetSelect').value || '';
+  const name = prompt('이 메시지 세트를 저장할 이름을 입력해주세요\n(예: 큰딸에게, 막내에게, 생일축하용)', defaultName);
+  if (!name || !name.trim()) return;
+  presets[name.trim()] = { ...messages };
+  savePresets();
+  renderPresetOptions();
+  document.getElementById('presetSelect').value = name.trim();
+});
+
+// 프리셋 삭제
+document.getElementById('presetDeleteBtn').addEventListener('click', () => {
+  const sel = document.getElementById('presetSelect');
+  const name = sel.value;
+  if (!name) {
+    alert('삭제할 저장된 세트를 먼저 선택해주세요.');
+    return;
+  }
+  if (confirm(`"${name}" 세트를 삭제할까요?`)) {
+    delete presets[name];
+    savePresets();
+    renderPresetOptions();
   }
 });
 
@@ -396,8 +523,22 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   // 최소 1개 문구 체크
   const hasAny = GESTURES.some(g => messages[g.id] && messages[g.id].length > 0);
   if (!hasAny) {
-    document.querySelector('.start-hint').style.color = '#ff5d8f';
-    document.querySelector('.start-hint').textContent = '문구를 1개 이상 입력해주세요!';
+    const hint = document.querySelector('.start-hint');
+    hint.style.color = '#ff5d8f';
+    hint.style.fontWeight = '800';
+    hint.textContent = '⚠️ 최소 1개 이상 문구를 입력해주세요!';
+    hint.style.animation = 'none';
+    requestAnimationFrame(() => { hint.style.animation = 'shakeHint 0.4s'; });
+
+    // 첫 번째 입력칸으로 스크롤 + 포커스 + 강조
+    const firstInput = document.querySelector('.gesture-input');
+    const firstRow = document.querySelector('.gesture-row');
+    if (firstRow) {
+      firstRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      firstRow.style.borderColor = '#ff5d8f';
+      setTimeout(() => { firstInput && firstInput.focus(); }, 350);
+      setTimeout(() => { firstRow.style.borderColor = ''; }, 2000);
+    }
     return;
   }
 
