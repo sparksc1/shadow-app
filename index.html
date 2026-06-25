@@ -122,11 +122,51 @@ window.FilesetResolver = FilesetResolver;
     border-radius: 16px;
     padding: 10px 14px;
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
     transition: border-color 0.2s;
   }
   .gesture-row:focus-within { border-color: #7d5fff; }
+  .gesture-row-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .voice-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 50px;
+  }
+  .voice-btn {
+    background: #211a33;
+    border: 1px solid #2e2548;
+    color: #b8aed8;
+    border-radius: 10px;
+    padding: 5px 10px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .voice-btn.active {
+    background: #3a2d5c;
+    border-color: #7d5fff;
+    color: #fff;
+  }
+  .voice-btn.recording {
+    background: #4a1f2d;
+    border-color: #ff5d8f;
+    color: #ff9eb8;
+    animation: recPulse 1s infinite;
+  }
+  @keyframes recPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .voice-status {
+    font-size: 0.66rem;
+    color: #635a7d;
+  }
 
   .gesture-emoji {
     width: 38px; height: 38px;
@@ -418,6 +458,24 @@ const STORAGE_KEY = 'gestureMessages_v1';
 const PRESETS_KEY = 'gesturePresets_v1';
 const ACTIVE_PRESET_KEY = 'gestureActivePreset_v1';
 let messages = {}; // id -> text (새로 작성인 것)
+let voiceSettings = {}; // id -> { mode: 'none'|'tts'|'record', audioData: base64string|null }
+const VOICE_KEY = 'gestureVoiceSettings_v1';
+
+function loadVoiceSettings() {
+  try {
+    const saved = localStorage.getItem(VOICE_KEY);
+    if (saved) voiceSettings = JSON.parse(saved);
+  } catch(e) { /* ignore */ }
+}
+function saveVoiceSettings() {
+  try {
+    localStorage.setItem(VOICE_KEY, JSON.stringify(voiceSettings));
+  } catch(e) {
+    console.error('음성 저장 실패(용량 초과 가능)', e);
+    alert('녹음 저장에 실패했어요. 녹음 시간을 줄이거나 다른 녹음을 정리해주세요.');
+  }
+}
+loadVoiceSettings();
 let presets = {};  // presetName -> {id: text, ...}
 
 function loadSavedMessages() {
@@ -473,11 +531,21 @@ function renderGestureInputs() {
     const row = document.createElement('div');
     row.className = 'gesture-row';
     const savedVal = messages[g.id] || '';
+    const voiceMode = voiceSettings[g.id]?.mode || 'none'; // 'none' | 'tts' | 'record'
+    const hasRecording = !!voiceSettings[g.id]?.audioData;
     row.innerHTML = `
-      <div class="gesture-emoji">${g.emoji}</div>
-      <div class="gesture-meta">
-        <div class="gesture-label">${g.name}</div>
-        <input class="gesture-input" type="text" maxlength="24" placeholder="${g.placeholder}" data-id="${g.id}" value="${savedVal.replace(/"/g,'&quot;')}">
+      <div class="gesture-row-main">
+        <div class="gesture-emoji">${g.emoji}</div>
+        <div class="gesture-meta">
+          <div class="gesture-label">${g.name}</div>
+          <input class="gesture-input" type="text" maxlength="24" placeholder="${g.placeholder}" data-id="${g.id}" value="${savedVal.replace(/"/g,'&quot;')}">
+        </div>
+      </div>
+      <div class="voice-bar">
+        <button class="voice-btn ${voiceMode === 'tts' ? 'active' : ''}" data-action="tts" data-id="${g.id}">🔊 자동읽기</button>
+        <button class="voice-btn ${voiceMode === 'record' ? 'active' : ''}" data-action="record" data-id="${g.id}">🎙️ ${hasRecording ? '녹음완료' : '내 목소리'}</button>
+        <button class="voice-btn" data-action="off" data-id="${g.id}" style="${voiceMode === 'none' ? 'display:none' : ''}">🔇 끄기</button>
+        <span class="voice-status" id="voiceStatus-${g.id}"></span>
       </div>
     `;
     gestureList.appendChild(row);
@@ -514,6 +582,97 @@ document.getElementById('presetSelect').addEventListener('change', (e) => {
     renderGestureInputs();
   }
 });
+
+// ── 음성 설정 (TTS / 녹음) ──
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingTargetId = null;
+
+gestureList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.voice-btn');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+
+  if (action === 'tts') {
+    voiceSettings[id] = { mode: 'tts', audioData: voiceSettings[id]?.audioData || null };
+    saveVoiceSettings();
+    renderGestureInputs();
+  } else if (action === 'off') {
+    voiceSettings[id] = { mode: 'none', audioData: voiceSettings[id]?.audioData || null };
+    saveVoiceSettings();
+    renderGestureInputs();
+  } else if (action === 'record') {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      // 이미 녹음 중 → 중지
+      mediaRecorder.stop();
+      return;
+    }
+    await startRecording(id);
+  }
+});
+
+async function startRecording(id) {
+  try {
+    const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+    recordingTargetId = id;
+    mediaRecorder = new MediaRecorder(micStream);
+
+    mediaRecorder.ondataavailable = (ev) => {
+      if (ev.data.size > 0) recordedChunks.push(ev.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      micStream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        voiceSettings[id] = { mode: 'record', audioData: reader.result };
+        saveVoiceSettings();
+        renderGestureInputs();
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    mediaRecorder.start();
+    renderGestureInputs();
+    const statusEl = document.getElementById('voiceStatus-' + id);
+    const recordBtn = document.querySelector(`.voice-btn[data-action="record"][data-id="${id}"]`);
+    if (recordBtn) {
+      recordBtn.classList.add('recording');
+      recordBtn.textContent = '⏹ 녹음중...(눌러서 중지)';
+    }
+    if (statusEl) statusEl.textContent = '말하고 있는 그대로 녹음돼요';
+
+    // 최대 8초 자동 중지 (용량 보호)
+    setTimeout(() => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+    }, 8000);
+  } catch (e) {
+    alert('마이크 권한을 허용해주세요!');
+  }
+}
+
+function playVoiceForGesture(id, text) {
+  const setting = voiceSettings[id];
+  if (!setting || setting.mode === 'none') return;
+
+  if (setting.mode === 'record' && setting.audioData) {
+    const audio = new Audio(setting.audioData);
+    audio.play().catch(() => {});
+  } else if (setting.mode === 'tts') {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ko-KR';
+      utter.rate = 1.0;
+      window.speechSynthesis.speak(utter);
+    }
+  }
+}
 
 // 프리셋 저장 - 인라인 모달
 document.getElementById('presetSaveBtn').addEventListener('click', () => {
@@ -834,6 +993,9 @@ function fireMessage(id) {
 
   currentDisplayedMessage = { text, color: g.color };
 
+  // 음성 재생 (TTS 또는 녹음)
+  playVoiceForGesture(id, text);
+
   msgEl.textContent = text;
   msgEl.style.color = '#fff';
   msgEl.style.textShadow = `0 0 30px ${g.color}, 0 2px 12px rgba(0,0,0,0.5)`;
@@ -866,6 +1028,7 @@ function fireMessage(id) {
 }
 
 function endMessage() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   const overlay = document.getElementById('messageOverlay');
   const veil = document.getElementById('glowVeil');
   overlay.style.transition = 'opacity 0.5s ease-in';
@@ -985,6 +1148,7 @@ function wrapText(ctx, text, cx, cy, maxWidth, lineHeight) {
 // ── 뒤로가기 ──
 document.getElementById('backBtn').addEventListener('click', () => {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
   // 다음 진입을 위해 모든 상태 초기화
   detectLoopActive = false; // 기존 detectLoop 루프 중단
