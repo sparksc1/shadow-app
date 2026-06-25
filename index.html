@@ -484,6 +484,7 @@ const ACTIVE_PRESET_KEY = 'gestureActivePreset_v1';
 let messages = {}; // id -> text (새로 작성인 것)
 let voiceSettings = {}; // id -> { mode: 'none'|'tts'|'record', audioData: base64string|null }
 let pendingPreview = null; // { id, audioData } 저장 전 임시 녹음
+let existingRecordOptionsOpen = null; // 기존 녹음 있을때 "들어보기/계속쓰기/다시녹음" 옵션 펼친 제스처 id
 const VOICE_KEY = 'gestureVoiceSettings_v1';
 
 function loadVoiceSettings() {
@@ -560,6 +561,7 @@ function renderGestureInputs() {
     const voiceMode = vs.mode || 'none'; // 'none' | 'tts' | 'record'
     const hasRecording = !!vs.audioData;
     const isPendingPreview = pendingPreview && pendingPreview.id === g.id;
+    const isExistingOptionsOpen = existingRecordOptionsOpen === g.id;
     row.innerHTML = `
       <div class="gesture-row-main">
         <div class="gesture-emoji">${g.emoji}</div>
@@ -570,9 +572,14 @@ function renderGestureInputs() {
       </div>
       <div class="voice-bar">
         <button class="voice-btn ${voiceMode === 'tts' ? 'active' : ''}" data-action="tts" data-id="${g.id}">🔊 자동읽기</button>
-        <button class="voice-btn ${voiceMode === 'record' ? 'active' : ''}" data-action="record" data-id="${g.id}">🎙️ ${hasRecording ? '재녹음' : '내 목소리'}</button>
+        <button class="voice-btn ${voiceMode === 'record' ? 'active' : ''}" data-action="record" data-id="${g.id}">🎙️ 내 목소리${hasRecording ? ' ✓' : ''}</button>
         <button class="voice-btn" data-action="off" data-id="${g.id}" style="${voiceMode === 'none' ? 'display:none' : ''}">🔇 끄기</button>
         <span class="voice-status" id="voiceStatus-${g.id}"></span>
+      </div>
+      <div class="preview-bar ${isExistingOptionsOpen ? 'visible' : ''}" id="existingBar-${g.id}">
+        <button class="preview-btn" data-action="play-existing" data-id="${g.id}">▶️ 들어보기</button>
+        <button class="preview-btn" data-action="use-existing" data-id="${g.id}">✅ 이대로 쓰기</button>
+        <button class="preview-btn retry" data-action="record-new" data-id="${g.id}">🔄 다시녹음</button>
       </div>
       <div class="preview-bar ${isPendingPreview ? 'visible' : ''}" id="previewBar-${g.id}">
         <button class="preview-btn" data-action="preview-play" data-id="${g.id}">▶️ 들어보기</button>
@@ -638,6 +645,26 @@ gestureList.addEventListener('click', async (e) => {
       mediaRecorder.stop();
       return;
     }
+    const hasExisting = !!voiceSettings[id]?.audioData;
+    if (hasExisting) {
+      // 이미 녹음해둔 게 있음 → 바로 새 녹음 시작하지 않고 선택지 표시
+      existingRecordOptionsOpen = id;
+      renderGestureInputs();
+    } else {
+      await startRecording(id);
+    }
+  } else if (action === 'use-existing') {
+    voiceSettings[id] = { ...voiceSettings[id], mode: 'record' };
+    saveVoiceSettings();
+    existingRecordOptionsOpen = null;
+    renderGestureInputs();
+  } else if (action === 'play-existing') {
+    if (voiceSettings[id]?.audioData) {
+      const audio = new Audio(voiceSettings[id].audioData);
+      audio.play().catch(() => {});
+    }
+  } else if (action === 'record-new') {
+    existingRecordOptionsOpen = null;
     await startRecording(id);
   } else if (action === 'preview-play') {
     if (pendingPreview && pendingPreview.id === id) {
