@@ -168,36 +168,6 @@ window.FilesetResolver = FilesetResolver;
     font-size: 0.66rem;
     color: #635a7d;
   }
-  .voice-gender-select {
-    background: #16121f;
-    border: 1px solid #2e2548;
-    color: #d8d0f0;
-    border-radius: 10px;
-    padding: 5px 8px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    font-family: inherit;
-  }
-  .gender-bar {
-    padding-left: 50px;
-    margin-top: 2px;
-  }
-  .gender-chip {
-    background: transparent;
-    border: none;
-    color: #8d84a8;
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 2px 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .gender-chip-edit {
-    color: #7d5fff;
-    font-size: 0.65rem;
-    text-decoration: underline;
-  }
   .preview-bar {
     display: none;
     align-items: center;
@@ -514,7 +484,6 @@ const ACTIVE_PRESET_KEY = 'gestureActivePreset_v1';
 let messages = {}; // id -> text (새로 작성인 것)
 let voiceSettings = {}; // id -> { mode: 'none'|'tts'|'record', audioData: base64string|null }
 let pendingPreview = null; // { id, audioData } 저장 전 임시 녹음
-let genderPickerOpen = null; // 현재 성별 선택 드롭다운이 열려있는 제스처 id
 const VOICE_KEY = 'gestureVoiceSettings_v1';
 
 function loadVoiceSettings() {
@@ -590,7 +559,6 @@ function renderGestureInputs() {
     const vs = voiceSettings[g.id] || {};
     const voiceMode = vs.mode || 'none'; // 'none' | 'tts' | 'record'
     const hasRecording = !!vs.audioData;
-    const gender = vs.gender || 'female';
     const isPendingPreview = pendingPreview && pendingPreview.id === g.id;
     row.innerHTML = `
       <div class="gesture-row-main">
@@ -606,17 +574,6 @@ function renderGestureInputs() {
         <button class="voice-btn" data-action="off" data-id="${g.id}" style="${voiceMode === 'none' ? 'display:none' : ''}">🔇 끄기</button>
         <span class="voice-status" id="voiceStatus-${g.id}"></span>
       </div>
-      ${voiceMode === 'tts' ? `
-      <div class="gender-bar">
-        ${genderPickerOpen === g.id ? `
-          <select class="voice-gender-select" data-action="gender" data-id="${g.id}" autofocus>
-            <option value="female" ${gender === 'female' ? 'selected' : ''}>여성 목소리</option>
-            <option value="male" ${gender === 'male' ? 'selected' : ''}>남성 목소리</option>
-          </select>
-        ` : `
-          <button class="gender-chip" data-action="gender-open" data-id="${g.id}">${gender === 'male' ? '👨 남성 목소리' : '👩 여성 목소리'} <span class="gender-chip-edit">변경</span></button>
-        `}
-      </div>` : ''}
       <div class="preview-bar ${isPendingPreview ? 'visible' : ''}" id="previewBar-${g.id}">
         <button class="preview-btn" data-action="preview-play" data-id="${g.id}">▶️ 들어보기</button>
         <button class="preview-btn" data-action="preview-save" data-id="${g.id}">✅ 저장</button>
@@ -669,9 +626,7 @@ gestureList.addEventListener('click', async (e) => {
   const id = btn.dataset.id;
 
   if (action === 'tts') {
-    const alreadyHadGender = !!voiceSettings[id]?.gender;
-    voiceSettings[id] = { ...voiceSettings[id], mode: 'tts', gender: voiceSettings[id]?.gender || 'female' };
-    if (!alreadyHadGender) genderPickerOpen = id; // 처음 켤 때는 선택창 열어주기
+    voiceSettings[id] = { ...voiceSettings[id], mode: 'tts' };
     saveVoiceSettings();
     renderGestureInputs();
   } else if (action === 'off') {
@@ -699,19 +654,6 @@ gestureList.addEventListener('click', async (e) => {
   } else if (action === 'preview-retry') {
     pendingPreview = null;
     await startRecording(id);
-  } else if (action === 'gender-open') {
-    genderPickerOpen = id;
-    renderGestureInputs();
-  }
-});
-
-gestureList.addEventListener('change', (e) => {
-  if (e.target.dataset.action === 'gender') {
-    const id = e.target.dataset.id;
-    voiceSettings[id] = { ...voiceSettings[id], gender: e.target.value };
-    saveVoiceSettings();
-    genderPickerOpen = null; // 선택 완료되면 닫기
-    renderGestureInputs();
   }
 });
 
@@ -758,31 +700,6 @@ async function startRecording(id) {
   }
 }
 
-// 한국어 TTS 음성을 성별로 분류해서 캐시
-let koreanVoicesCache = null;
-function getKoreanVoicesByGender() {
-  if (koreanVoicesCache) return koreanVoicesCache;
-  const voices = window.speechSynthesis.getVoices().filter(v => v.lang === 'ko-KR' || v.lang === 'ko_KR' || v.lang.startsWith('ko'));
-  // "female" 안에 "male"이 포함되는 문제를 피하기 위해 순서를 신중히 매칭
-  const femaleHints = ['female', '여성', 'yuna', 'sora', 'woman'];
-  const maleHints = ['man', '남성', 'jinho'];
-  const female = voices.filter(v => {
-    const n = v.name.toLowerCase();
-    return femaleHints.some(h => n.includes(h));
-  });
-  const male = voices.filter(v => {
-    const n = v.name.toLowerCase();
-    // female 키워드가 포함되어 있으면 male로 분류하지 않음
-    if (femaleHints.some(h => n.includes(h))) return false;
-    return maleHints.some(h => n.includes(h)) || n.includes('male');
-  });
-  koreanVoicesCache = { all: voices, female, male };
-  return koreanVoicesCache;
-}
-if ('speechSynthesis' in window) {
-  window.speechSynthesis.onvoiceschanged = () => { koreanVoicesCache = null; };
-}
-
 function playVoiceForGesture(id, text) {
   const setting = voiceSettings[id];
   if (!setting || setting.mode === 'none') return;
@@ -796,30 +713,12 @@ function playVoiceForGesture(id, text) {
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'ko-KR';
       utter.rate = 1.0;
+      utter.pitch = 1.0;
 
-      const gender = setting.gender || 'female';
-      const { all, female, male } = getKoreanVoicesByGender();
-      let pickFrom = gender === 'male' ? male : female;
+      // 기기/브라우저의 기본 한국어 음성을 그대로 사용 (가장 자연스러움)
+      const voices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('ko'));
+      if (voices[0]) utter.voice = voices[0];
 
-      if (pickFrom.length === 0 && all.length > 1) {
-        // 이름으로 구분이 안 되면 인덱스로 추정 (기기마다 다를 수 있음)
-        pickFrom = gender === 'male' ? [all[1]] : [all[0]];
-      }
-      if (pickFrom[0]) utter.voice = pickFrom[0];
-
-      // 음성 자체가 명확히 다른 항목으로 매칭되지 않았다면, pitch로 확실히 구분
-      const matchedDistinctVoice = (gender === 'male' ? male.length > 0 : female.length > 0);
-      if (!matchedDistinctVoice) {
-        if (gender === 'male') {
-          utter.pitch = 0.55;
-          utter.rate = 0.92;
-        } else {
-          utter.pitch = 1.3;
-          utter.rate = 1.0;
-        }
-      }
-
-      console.log('TTS 음성:', { gender, voiceUsed: utter.voice?.name, pitch: utter.pitch, totalVoices: all.length });
       window.speechSynthesis.speak(utter);
     }
   }
