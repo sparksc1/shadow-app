@@ -869,13 +869,26 @@ function playVoiceForGesture(id, text) {
       utter.rate = 1.0;
       utter.pitch = 1.0;
 
-      // 기기/브라우저의 기본 한국어 음성을 그대로 사용 (가장 자연스러움)
-      // iOS는 getVoices()가 늦게 채워질 수 있어 캐시된 목록을 우선 사용하고,
-      // 비어있으면 그 순간 다시 한번 조회한다.
+      // 기기/브라우저의 기본 한국어 음성을 사용하되, 여성 목소리를 우선 선택한다.
+      // (남녀 선택 기능 통일 이전에는 항상 여성 목소리가 잘 나왔는데, 그냥 voices[0]를
+      //  쓰면 기기에 따라 남성 목소리가 먼저 와서 이상하게 들리는 문제가 있었음)
       const voices = cachedKoVoices.length
         ? cachedKoVoices
         : window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('ko'));
-      if (voices[0]) utter.voice = voices[0];
+
+      const femaleHints = ['female', '여성', 'yuna', 'sora', 'woman'];
+      const maleHints = ['male', '남성', 'man', 'jinho'];
+      const femaleVoice = voices.find(v => {
+        const n = v.name.toLowerCase();
+        return femaleHints.some(h => n.includes(h));
+      });
+      // 이름으로 구분이 안 되면, 남성으로 보이는 이름을 피해서 첫번째를 고른다
+      const fallbackVoice = voices.find(v => {
+        const n = v.name.toLowerCase();
+        return !maleHints.some(h => n.includes(h));
+      });
+      const chosenVoice = femaleVoice || fallbackVoice || voices[0];
+      if (chosenVoice) utter.voice = chosenVoice;
 
       window.speechSynthesis.speak(utter);
     }
